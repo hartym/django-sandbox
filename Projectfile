@@ -1,0 +1,160 @@
+name = 'sandbox'
+description = 'A django sandbox'
+license = 'Not open source'
+
+url = ''
+download_url = ''
+
+author = 'Romain Dorgueil'
+author_email = 'romain@dorgueil.net'
+
+enable_features = {
+    'make',
+    'sphinx',
+    'pytest',
+    'git',
+    'pylint',
+    'python',
+    'yapf',
+}
+
+install_requires = [
+    'pillow==4.0.0',
+    'argon2-cffi==16.3.0',
+    'awesome-slugify==1.6.5',
+    'django ==1.11rc1',
+    'django-allauth==0.31.0',
+    'django-braces==1.11.0',
+    'django-crispy-forms==1.6.1',
+    'django-environ ==0.4.1',
+    'django-model-utils==2.6.1',
+    'django-redis==4.7.0',
+    'pytz==2016.10',
+    'redis>=2.10.5',
+    'wheel ==0.29.0',
+    'celery==4.0.2',
+    'whitenoise ==3.3.0',
+    'psycopg2==2.7.1',
+]
+
+extras_require = {
+    'dev': [
+        'Sphinx==1.5.3',
+        'Werkzeug==0.12.1',
+        'coverage==4.3.4',
+        'django-coverage-plugin==1.5.0',
+        'django-debug-toolbar==1.6',
+        'django-extensions==1.7.7',
+        'django-test-plus==1.0.17',
+        'factory-boy==2.8.1',
+        'ipdb==0.10.2',
+        'mock >=2,<3',
+        'nose >=1,<2',
+        'pylint >=1,<2',
+        'pytest >=3,<4',
+        'pytest-cov >=2,<3',
+        'pytest-django==3.1.2',
+        'pytest-sugar==0.8.0',
+        'pytest-timeout >=1,<2',
+        'sphinx_rtd_theme',
+        'yapf',
+    ],
+}
+
+
+@listen('edgy.project.feature.make.on_generate')
+def on_make_generate_add_version(event):
+    event.makefile.setleft('ENV', 'production')
+    event.makefile['VERSION'] = '$(shell git describe)'
+
+
+@listen('edgy.project.feature.make.on_generate')
+def on_make_generate_add_npm(event):
+    event.makefile['NPM'] = '$(shell which yarn || which npm)'
+
+    event.makefile.get_target('install').after_install += [
+        '$(NPM) install --production',
+    ]
+    event.makefile.get_target('install-dev').after_install += ['$(NPM) install']
+
+
+@listen('edgy.project.feature.make.on_generate')
+def on_make_generate_add_development(event):
+    event.makefile.set_deps('$(SPHINX_SOURCEDIR)', deps=('install-dev', ))
+    event.makefile.set_deps('lint', deps=('install-dev', ))
+    event.makefile.set_deps('test', deps=('install-dev', ))
+    event.makefile['PYTEST_OPTIONS'] = event.makefile['PYTEST_OPTIONS'] + ' --reuse-db'
+
+
+@listen('edgy.project.feature.make.on_generate', priority=1)
+def on_make_generate_django_targets(event):
+    event.makefile['PYTHON_REQUIREMENTS_FILE'] = 'requirements/$(ENV).txt'
+    event.makefile['PYTHON_REQUIREMENTS_DEV_FILE'] = 'requirements/local.txt'
+    event.makefile['DJANGO_SETTINGS_MODULE'] = 'config.settings.$(ENV)'
+
+    event.makefile.add_target(
+        'static',
+        '''
+        $(NPM) run build
+        $(VIRTUAL_ENV)/bin/python manage.py collectstatic --noinput
+    ''',
+        deps=('install-dev', ),
+        phony=True,
+        doc='''
+        Generate all static assets needed for the application to run in production mode. In development mode, this is
+        not required as the assets will be generated on the fly.
+    '''
+    )
+
+
+@listen('edgy.project.feature.make.on_generate', priority=10)
+def on_make_generate_docker_targets(event):
+    event.makefile['BUILD_DIR'] = '.build'
+
+    event.makefile['DOCKER_REGISTRY'] = ''
+    event.makefile['DOCKER_USER'] = ''
+    event.makefile['DOCKER_NAME'] = 'sandbox'
+    event.makefile['DOCKER_IMAGE'] = '$(DOCKER_USER)/$(DOCKER_NAME)'
+    event.makefile['DOCKER'] = 'docker'
+    event.makefile['DOCKER_PUSH'] = 'docker push'
+
+    event.makefile.add_target(
+        '$(BUILD_DIR)',
+        '''
+        git clone . $(BUILD_DIR)
+        (cd $(BUILD_DIR); git submodule update --init --recursive)
+    ''',
+        doc='''
+        Build directory is a local clean clone of the repository used to generate docker images from a sane codebase.
+    '''
+    )
+
+    event.makefile['ROCKER'] = '$(shell [ -x $(GOPATH)/bin/rocker ] && echo $(GOPATH)/bin/rocker || which rocker)'
+    event.makefile['ROCKER_OPTIONS'] = ''
+    event.makefile[
+        'ROCKER_DEPENDENCIES_HASH'
+    ] = '$(word 1, $(shell md5sum ./setup.py ./package.json ./yarn.lock ./bower.json ./requirements/* | sort | md5sum))'
+
+    event.makefile.add_target(
+        'build',
+        '''
+        $(ROCKER) build -f config/docker/django/Rockerfile-dev -var Version=$(ROCKER_DEPENDENCIES_HASH) --attach $(ROCKER_OPTIONS) .
+    ''',
+        phony=True
+    )
+
+    event.makefile.add_target(
+        'run',
+        '''
+        VERSION=$(ROCKER_DEPENDENCIES_HASH) docker-compose up
+    ''',
+        deps=('build', ),
+        phony=True,
+        first=True
+    )
+
+    event.makefile.add_target(
+        'shell', '''
+        VERSION=$(ROCKER_DEPENDENCIES_HASH) docker-compose run django bash
+    ''', phony=True
+    )
