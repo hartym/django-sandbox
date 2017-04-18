@@ -23,7 +23,7 @@ TEMPLATES[0]['OPTIONS']['debug'] = DEBUG
 # ------------------------------------------------------------------------------
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
 # Note: This key only used for development and testing.
-SECRET_KEY = env('DJANGO_SECRET_KEY', default='#-}vKt-C)-x37xd/ikgGqE*n{4RN;>J)SA>jWRy_v%)HcuE1i5')
+SECRET_KEY = env('DJANGO_SECRET_KEY', default='4IIofX5wP4B]xwF9NjnqZ~LuLNgy0``7%z9Rx^0DK6$:y@(t8O')
 
 # Mail settings
 # ------------------------------------------------------------------------------
