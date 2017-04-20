@@ -23,7 +23,7 @@ TEMPLATES[0]['OPTIONS']['debug'] = DEBUG
 # ------------------------------------------------------------------------------
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
 # Note: This key only used for development and testing.
-SECRET_KEY = env('DJANGO_SECRET_KEY', default='a6:Hp!l+tF|7@-(BJ=cU5`r~tByTAFn%tLJT:SF,YB^UGu[.9?')
+SECRET_KEY = env('DJANGO_SECRET_KEY', default='0:o44yX.ffWiL2RYi5t7[YC*r>YQ&Z21[^R|:;]/M;:cnHi`!.')
 
 # Mail settings
 # ------------------------------------------------------------------------------
@@ -48,6 +48,7 @@ MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
 INSTALLED_APPS += ['debug_toolbar', ]
 
 INTERNAL_IPS = ['127.0.0.1', '10.0.2.2', ]
+
 # tricks to have debug toolbar when developing with docker
 if os.environ.get('USE_DOCKER') == 'yes':
     ip = socket.gethostbyname(socket.gethostname())

@@ -1,9 +1,11 @@
 # This file has been auto-generated.
 # All changes will be lost, see Projectfile.
 #
-# Updated at 2017-04-19 12:02:09.083110
+# Updated at 2017-04-20 17:01:06.631260
 
 ENV ?= production
+VARIANT ?= 
+VERSION ?= $(shell git describe)
 PYTHON ?= $(shell which python)
 PYTHON_BASENAME ?= $(shell basename $(PYTHON))
 PYTHON_REQUIREMENTS_FILE ?= requirements/$(ENV).txt
@@ -20,24 +22,18 @@ SPHINX_SOURCEDIR ?= docs
 SPHINX_BUILDDIR ?= $(SPHINX_SOURCEDIR)/_build
 YAPF ?= $(VIRTUAL_ENV)/bin/yapf
 YAPF_OPTIONS ?= -rip
-VERSION ?= $(shell git describe)
+DEPSUM ?= $(word 1, $(shell md5sum ./setup.py ./setup.cfg ./package.json ./yarn.lock ./requirements/* 2>/dev/null | sort | md5sum))
 NPM ?= $(shell which yarn || which npm)
 DJANGO_SETTINGS_MODULE ?= config.settings.$(ENV)
 BUILD_DIR ?= .build
-DOCKER_REGISTRY ?= 
-DOCKER_USER ?= 
-DOCKER_NAME ?= sandbox
-DOCKER_IMAGE ?= $(DOCKER_USER)/$(DOCKER_NAME)
-DOCKER ?= docker
-DOCKER_PUSH ?= docker push
-ROCKER ?= $(shell [ -x $(GOPATH)/bin/rocker ] && echo $(GOPATH)/bin/rocker || which rocker)
-ROCKER_OPTIONS ?= 
-ROCKER_DEPENDENCIES_HASH ?= $(word 1, $(shell md5sum ./setup.py ./package.json ./yarn.lock ./bower.json ./requirements/* | sort | md5sum))
+DOCKER ?= $(shell which docker)
+DOCKER_PUSH ?= $(DOCKER) push
+DOCKER_IMAGE ?= registry.gitlab.com/rdorgueil/sandbox
 
 .PHONY: $(SPHINX_SOURCEDIR) build clean format install install-dev lint run shell static test
 
 run: build
-	VERSION=$(ROCKER_DEPENDENCIES_HASH) docker-compose up
+	VERSION=$(DEPSUM) docker-compose up
 
 # Installs the local project dependencies.
 install: $(VIRTUAL_ENV)
@@ -88,7 +84,8 @@ $(BUILD_DIR):
 	(cd $(BUILD_DIR); git submodule update --init --recursive)
 
 build:
-	$(ROCKER) build -f config/docker/django/Rockerfile-dev -var Version=$(ROCKER_DEPENDENCIES_HASH) --attach $(ROCKER_OPTIONS) .
+	$(DOCKER) build -t $(DOCKER_IMAGE)-deps:$(DEPSUM)$(VARIANT) -f config/docker/django/deps/Dockerfile$(VARIANT) .
+	echo $(DOCKER_IMAGE)-deps:$(DEPSUM)$(VARIANT) > .docker-last-built-image
 
 shell:
-	VERSION=$(ROCKER_DEPENDENCIES_HASH) docker-compose run django bash
+	VERSION=$(DEPSUM) docker-compose run django bash

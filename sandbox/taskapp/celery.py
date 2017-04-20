@@ -24,6 +24,7 @@ class CeleryConfig(AppConfig):
 
         if hasattr(settings, 'RAVEN_CONFIG'):
             # Celery signal registration
+
             from raven import Client as RavenClient
             from raven.contrib.celery import register_signal as raven_register_signal
             from raven.contrib.celery import register_logger_signal as raven_register_logger_signal

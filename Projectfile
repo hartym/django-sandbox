@@ -64,8 +64,12 @@ extras_require = {
 
 @listen('edgy.project.feature.make.on_generate')
 def on_make_generate_add_version(event):
+    event.makefile.setleft('VERSION', '$(shell git describe)')
+    event.makefile.setleft('VARIANT', '')
     event.makefile.setleft('ENV', 'production')
-    event.makefile['VERSION'] = '$(shell git describe)'
+    event.makefile[
+        'DEPSUM'
+    ] = '$(word 1, $(shell md5sum ./setup.py ./setup.cfg ./package.json ./yarn.lock ./requirements/* 2>/dev/null | sort | md5sum))'
 
 
 @listen('edgy.project.feature.make.on_generate')
@@ -111,13 +115,6 @@ def on_make_generate_django_targets(event):
 def on_make_generate_docker_targets(event):
     event.makefile['BUILD_DIR'] = '.build'
 
-    event.makefile['DOCKER_REGISTRY'] = ''
-    event.makefile['DOCKER_USER'] = ''
-    event.makefile['DOCKER_NAME'] = 'sandbox'
-    event.makefile['DOCKER_IMAGE'] = '$(DOCKER_USER)/$(DOCKER_NAME)'
-    event.makefile['DOCKER'] = 'docker'
-    event.makefile['DOCKER_PUSH'] = 'docker push'
-
     event.makefile.add_target(
         '$(BUILD_DIR)',
         '''
@@ -129,32 +126,25 @@ def on_make_generate_docker_targets(event):
     '''
     )
 
-    event.makefile['ROCKER'] = '$(shell [ -x $(GOPATH)/bin/rocker ] && echo $(GOPATH)/bin/rocker || which rocker)'
-    event.makefile['ROCKER_OPTIONS'] = ''
-    event.makefile[
-        'ROCKER_DEPENDENCIES_HASH'
-    ] = '$(word 1, $(shell md5sum ./setup.py ./package.json ./yarn.lock ./bower.json ./requirements/* | sort | md5sum))'
+    event.makefile['DOCKER'] = '$(shell which docker)'
+    event.makefile['DOCKER_PUSH'] = '$(DOCKER) push'
+    event.makefile['DOCKER_IMAGE'] = 'registry.gitlab.com/rdorgueil/sandbox'
 
     event.makefile.add_target(
         'build',
         '''
-        $(ROCKER) build -f config/docker/django/Rockerfile-dev -var Version=$(ROCKER_DEPENDENCIES_HASH) --attach $(ROCKER_OPTIONS) .
+        $(DOCKER) build -t $(DOCKER_IMAGE)-deps:$(DEPSUM)$(VARIANT) -f config/docker/django/deps/Dockerfile$(VARIANT) .
+        echo $(DOCKER_IMAGE)-deps:$(DEPSUM)$(VARIANT) > .docker-last-built-image
     ''',
         phony=True
     )
 
     event.makefile.add_target(
-        'run',
-        '''
-        VERSION=$(ROCKER_DEPENDENCIES_HASH) docker-compose up
-    ''',
-        deps=('build', ),
-        phony=True,
-        first=True
+        'run', '''
+        VERSION=$(DEPSUM) docker-compose up
+    ''', deps=('build', ), phony=True, first=True
     )
 
-    event.makefile.add_target(
-        'shell', '''
-        VERSION=$(ROCKER_DEPENDENCIES_HASH) docker-compose run django bash
-    ''', phony=True
-    )
+    event.makefile.add_target('shell', '''
+        VERSION=$(DEPSUM) docker-compose run django bash
+    ''', phony=True)

@@ -1,0 +1,47 @@
+image: docker:latest
+
+services:
+  - docker:dind
+
+variables:
+  DOCKER_DRIVER: overlay
+  STAGING_REGISTRY: "registry.gitlab.com/rdorgueil"
+  CONTAINER_TEST_IMAGE: ${STAGING_REGISTRY}/${CI_PROJECT_NAME}/${CI_BUILD_REF_NAME}_${CI_BUILD_REF}_test
+  #CONTAINER_RELEASE_IMAGE: ${STAGING_REGISTRY}/${CI_PROJECT_NAME}:${CI_BUILD_REF_NAME}_${CI_BUILD_REF}
+
+stages:
+  - build
+  - test
+  - deploy
+
+before_script:
+  - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+
+build:
+  stage: build
+  script:
+    - docker info
+    - apk update
+    - apk upgrade
+    - apk add python python-dev py-pip build-base
+    - DOCKER_IMAGE=$CONTAINER_TEST_IMAGE make build
+    - docker push $(cat .docker-last-built-image)
+
+test:
+  stage: test
+  script:
+    - make test
+
+deploy:
+  image: google/cloud-sdk
+  stage: deploy
+  script:
+  - echo "$GOOGLE_KEY" > key.json
+  - gcloud auth activate-service-account --key-file key.json
+  - gcloud config set compute/zone europe-west1-c
+  - gcloud config set project actuator-sample
+  - gcloud config set container/use_client_certificate True
+  - gcloud container clusters get-credentials actuator-sample
+  - kubectl delete secret registry.gitlab.com
+  - kubectl create secret docker-registry registry.gitlab.com --docker-server=https://registry.gitlab.com --docker-username=rdorgueil --docker-password=$REGISTRY_PASSWD --docker-email=romain@dorgueil.net
+  - kubectl apply -f deployment.yml
