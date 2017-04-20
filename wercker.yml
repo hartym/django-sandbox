@@ -1,0 +1,12 @@
+box: quay.io/rdorgueil/pynode:3.6-6.x
+
+build:
+  steps:
+    - script:
+        name: install dependencies
+        code: |
+          make install-dev
+    - script:
+        name: run tests
+        code: |
+          make test
